@@ -112,6 +112,12 @@
                   <geom material="linkgray" mesh="wrist3" class="visual"/>
                   <geom class="eef_collision" pos="0 0.08 0" quat="1 1 0 0" size="0.04 0.02"/>
                   <site name="attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
+
+                  <body name="force_sensor" pos="0 0.1 0" euler="3.14 0 3.14">
+                    <geom name='force_sensor_geom' type="sphere" mass="0.0" size="0.04"
+                          rgba="0 1 0 0.3"/>
+                    <site name="force_sensor_site" pos="0 0 0" quat="1 0 0 0"/>
+                  </body>
                 </body>
               </body>
             </body>
@@ -120,6 +126,10 @@
       </body>
     </body>
   </worldbody>
+
+  <sensor>
+    <force site="force_sensor_site"/>
+  </sensor>
 
   <actuator>
     <general class="size3" name="shoulder_pan" joint="shoulder_pan_joint"/>
@@ -130,7 +140,7 @@
     <general class="size1" name="wrist_3" joint="wrist_3_joint"/>
   </actuator>
 
-  <keyframe>
-    <key name="home" qpos="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0" ctrl="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0"/>
-  </keyframe>
+<!--  <keyframe>-->
+<!--    <key name="home" qpos="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0" ctrl="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0"/>-->
+<!--  </keyframe>-->
 </mujoco>
