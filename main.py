@@ -41,7 +41,7 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
         viewer_init(viewer)
         print("进入主循环...")
         step_count = 0
-        total_control_time = 0.0  # 总控制时间
+        total_wireless_time = 0.0  # 总无线链路时延
         total_transmissions = 0  # 总传输次数
         ber_sum = 0.0  # 总误码率
 
@@ -50,10 +50,14 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
             waypoint = joint_trajectory.get_next_waypoint(data.qpos[:6])
 
             # 控制机械臂
-            control_start_time = time.time()
             if use_wireless and wireless_link:
+                # 记录无线链路处理开始时间
+                wireless_start_time = time.time()
                 # 通过无线链路传输关节角度
                 transmitted_waypoint, ber = wireless_link.transmit(waypoint, ebno_db=ebno_db)
+                # 计算无线链路处理时间
+                wireless_time = time.time() - wireless_start_time
+                total_wireless_time += wireless_time
                 data.ctrl[:6] = transmitted_waypoint
                 ber_sum += ber
                 total_transmissions += 1
@@ -64,15 +68,12 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
                     diff = np.abs(np.array(waypoint) - np.array(transmitted_waypoint))
                     print(f"步骤 {step_count}: 传输差异: {diff}")
                     print(f"步骤 {step_count}: 误码率: {ber:.6f}")
+                    print(f"步骤 {step_count}: 无线链路时延: {wireless_time*1000:.2f}ms")
             else:
                 # 直接控制机械臂
                 data.ctrl[:6] = waypoint
                 if step_count % 20 == 0:  # 每20步输出一次，控制输出量
                     print(f"步骤 {step_count}: 直接控制路径点: {waypoint}")
-
-            # 计算控制时间
-            control_time = time.time() - control_start_time
-            total_control_time += control_time
 
             # 获取并显示力传感器数据（可选）
             if force_sensor is not None and force_plotter is not None:
@@ -90,8 +91,7 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
         if total_transmissions > 0:
             average_ber = ber_sum / total_transmissions
             print(f"\n平均误码率: {average_ber:.6f}")
-        average_control_time = total_control_time / step_count if step_count > 0 else 0.0
-        print(f"平均控制时间: {average_control_time*1000:.2f}ms")
+            print(f"总无线链路时延: {total_wireless_time*1000:.2f}ms")
         print(f"总运行时间: {total_run_time:.2f}s")
         print("退出主循环...")
 
@@ -104,6 +104,6 @@ if __name__ == "__main__":
     不使用力传感器 use_force_sensor=False
     '''
 
-    # main(use_wireless=True, ebno_db=10.0, use_force_sensor=True, use_advanced_wireless=True)
+    main(use_wireless=True, ebno_db=10.0, use_force_sensor=True, use_advanced_wireless=False)
 
-    main(use_wireless=False, use_force_sensor=True)
+    #main(use_wireless=False, use_force_sensor=True)
