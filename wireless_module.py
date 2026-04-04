@@ -5,18 +5,31 @@ import sionna.phy
 
 class WirelessLink:
     """无线链路仿真类"""
-    def __init__(self, precision=16, n=192, coderate=0.5):
+    def __init__(self, precision=16, coderate=0.5):
         self.precision = precision
-        self.k = 6 * precision  # 6个关节角度，每个16位
-        self.n = n
-        self.coderate = coderate
+        self.k = 6 * precision  # 固定 96 bit（6轴×16位）
+        self.coderate = coderate  # 手动设：0.3 / 0.5 / 0.7
+        self.num_bits_per_symbol = 2  # QPSK
         
-        # 初始化Sionna模块
-        self.constellation = sionna.phy.mapping.Constellation("qam", num_bits_per_symbol=2)
+        # 1. 按手动设的码率算 n
+        n_raw = round(self.k / self.coderate)
+        
+        # 2. 保证 n 是 QPSK 整数倍（必须）
+        self.n = ((n_raw + self.num_bits_per_symbol - 1) // self.num_bits_per_symbol) * self.num_bits_per_symbol
+        
+        # 3. 保证 n ≥ k
+        self.n = max(self.k, self.n)
+        
+        # 实际码率
+        self.actual_coderate = self.k / self.n
+        
+        # 调制 / 信道
+        self.constellation = sionna.phy.mapping.Constellation("qam", num_bits_per_symbol=self.num_bits_per_symbol)
         self.mapper = sionna.phy.mapping.Mapper(constellation=self.constellation)
         self.demapper = sionna.phy.mapping.Demapper("app", constellation=self.constellation)
         self.awgn_channel = sionna.phy.channel.AWGN()
-        # 5G LDPC编码器/译码器
+        
+        # LDPC 编码器：用手动算的 k 和 n
         self.encoder = sionna.phy.fec.ldpc.LDPC5GEncoder(self.k, self.n)
         self.decoder = sionna.phy.fec.ldpc.LDPC5GDecoder(self.encoder, hard_out=True)
     
@@ -25,11 +38,11 @@ class WirelessLink:
         # 将关节角度转换为比特流
         bits = self._joints_to_bits(joint_angles)
         
-        # 计算噪声功率
+        # 计算噪声功率 - 使用实际码率
         no = sionna.phy.utils.ebnodb2no(
             ebno_db,
-            num_bits_per_symbol=2,
-            coderate=self.coderate
+            num_bits_per_symbol=self.num_bits_per_symbol,
+            coderate=self.actual_coderate
         )
         
         # 编码
@@ -115,29 +128,30 @@ class WirelessLink:
 
 class AdvancedWirelessLink:
     """高级无线链路仿真类，支持3GPP CDL信道模型和OFDM"""
-    def __init__(self, precision=16):
+    def __init__(self, precision=16, cdl_model="C", speed=10.0, delay_spread=100e-9, 
+                 bs_antennas=4, subcarrier_spacing=30e3, fft_size=76):
         self.precision = precision
         self.k = 6 * precision  # 6个关节角度，每个16位
         
-        # 天线配置
+        # 天线配置（固定UT天线为1，简化实现）
         self.NUM_UT = 1
         self.NUM_BS = 1
         self.NUM_UT_ANT = 1
-        self.NUM_BS_ANT = 4
-        self.NUM_STREAMS_PER_TX = self.NUM_UT_ANT
+        self.NUM_BS_ANT = bs_antennas
+        self.NUM_STREAMS_PER_TX = 1
         
         # 3GPP CDL信道参数
         self.CARRIER_FREQUENCY = 2.6e9
-        self.DELAY_SPREAD = 100e-9
+        self.DELAY_SPREAD = delay_spread
         self.DIRECTION = "uplink"
-        self.CDL_MODEL = "C"
-        self.SPEED = 10.0
+        self.CDL_MODEL = cdl_model
+        self.SPEED = speed
         
         # OFDM资源网格参数
         self.RESOURCE_GRID_PARAMS = {
             "num_ofdm_symbols": 14,
-            "fft_size": 76,
-            "subcarrier_spacing": 30e3,
+            "fft_size": fft_size,
+            "subcarrier_spacing": subcarrier_spacing,
             "num_tx": self.NUM_UT,
             "num_streams_per_tx": self.NUM_STREAMS_PER_TX,
             "cyclic_prefix_length": 6,
@@ -172,13 +186,15 @@ class AdvancedWirelessLink:
         # 确保k在合理范围内
         self.k = max(min_k, max_k)  # 确保码率不小于1/5
         
-        # 天线阵列
+        # 天线阵列（固定UT天线为1）
         self.UT_ARRAY = sionna.phy.channel.tr38901.Antenna(
             polarization="single",
             polarization_type="V",
             antenna_pattern="38.901",
             carrier_frequency=self.CARRIER_FREQUENCY
         )
+        
+        # BS天线阵列
         self.BS_ARRAY = sionna.phy.channel.tr38901.AntennaArray(
             num_rows=1,
             num_cols=int(self.NUM_BS_ANT / 2),
@@ -257,6 +273,11 @@ class AdvancedWirelessLink:
         # 需要调整为: [batch_size, num_tx, num_streams_per_tx, num_data_symbols]
         x = tf.expand_dims(x, axis=1)  # 添加num_tx维度
         x = tf.expand_dims(x, axis=2)  # 添加num_streams维度
+        # 复制数据到多个流（如果需要）
+        if self.NUM_STREAMS_PER_TX > 1:
+            # 对于多流情况，我们需要确保数据形状正确
+            # 这里简化处理，复制相同的数据到所有流
+            x = tf.repeat(x, self.NUM_STREAMS_PER_TX, axis=2)
         # 资源网格映射
         x_rg = self.rg_mapper(x)
         # 信道传输

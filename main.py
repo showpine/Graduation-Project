@@ -10,7 +10,8 @@ from robot_module import (
 from wireless_module import WirelessLink, AdvancedWirelessLink
 
 
-def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_wireless=True):
+def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_wireless=True, cdl_model="C", speed=10.0, delay_spread=100e-9, 
+         bs_antennas=4, subcarrier_spacing=30e3, fft_size=76):
     """主程序
     
     Args:
@@ -18,17 +19,33 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
         ebno_db: 信噪比(dB)
         use_force_sensor: 是否启用力传感器可视化
         use_advanced_wireless: 是否使用高级无线链路
+        cdl_model: CDL信道模型(A/B/C/D/E)
+        speed: 移动速度(m/s)
+        delay_spread: 延迟扩展(s)
+        bs_antennas: BS天线数量
+        subcarrier_spacing: 子载波间隔(Hz)
+        fft_size: FFT大小
     """
+    if use_advanced_wireless:
+        print(f"使用CDL信道模型: {cdl_model}")
+        print(f"移动速度: {speed} m/s")
+        print(f"延迟扩展: {delay_spread * 1e9:.0f} ns")
+        print(f"UT天线数量: 1")
+        print(f"BS天线数量: {bs_antennas}")
+        print(f"子载波间隔: {subcarrier_spacing/1000:.0f} kHz")
+        print(f"FFT大小: {fft_size}")
     start_time = time.time()
 
     if use_wireless:
         print(f"使用无线链路，Eb/No = {ebno_db} dB")
         if use_advanced_wireless:
             print("使用高级无线链路（3GPP CDL信道模型 + OFDM）")
-            wireless_link = AdvancedWirelessLink()
+            wireless_link = AdvancedWirelessLink(cdl_model=cdl_model, speed=speed, delay_spread=delay_spread, 
+                                               bs_antennas=bs_antennas, 
+                                               subcarrier_spacing=subcarrier_spacing, fft_size=fft_size)
         else:
             print("使用基本无线链路（AWGN信道）")
-            wireless_link = WirelessLink()
+            wireless_link = WirelessLink(coderate=0.5)
     else:
         print("理想情况（无无线链路）")
         wireless_link = None
@@ -97,13 +114,7 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
 
 
 if __name__ == "__main__":
-    ''' 
-    使用高级无线链路（3GPP CDL信道模型 + OFDM）use_advanced_wireless=True
-    使用基本无线链路（AWGN信道） use_advanced_wireless=False
-    使用力传感器 use_force_sensor=True
-    不使用力传感器 use_force_sensor=False
-    '''
 
-    main(use_wireless=True, ebno_db=10.0, use_force_sensor=True, use_advanced_wireless=False)
-
-    #main(use_wireless=False, use_force_sensor=True)
+    # main(use_wireless=True, ebno_db=0.0, use_force_sensor=True, use_advanced_wireless=False)
+    main(use_advanced_wireless=True, use_force_sensor=True, ebno_db=0.0, fft_size=312)
+    # main(use_wireless=False, use_force_sensor=True)
