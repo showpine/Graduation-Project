@@ -14,6 +14,30 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
          bs_antennas=4, subcarrier_spacing=30e3, fft_size=76):
     """主程序
     
+    仿真环境与条件说明：
+    1. 传播距离：10公里（机械臂到基站的距离）
+    2. 物理层处理能力：
+       - 编码/解码速度：100 Mbps
+       - 调制/解调速度：100 Msymbols/s（QPSK调制时相当于200 Mbps）
+       - OFDM处理速度：1 GHz
+    3. 传输参数：
+       - 基本无线链路：50 Mbps带宽
+       - 高级无线链路：50 Mbps带宽
+    4. 信道模型：
+       - 基本无线链路：AWGN信道
+       - 高级无线链路：3GPP CDL信道模型
+    5. 天线配置：
+       - UT（机械臂端）：1根天线
+       - BS（控制端）：可配置4/8/16根天线
+    6. 数据传输：
+       - 6个关节角度，每个16位精度，共96比特
+       - LDPC编码，码率可配置（0.3/0.5/0.7）
+       - QPSK调制
+    7. 时延计算：
+       - 物理层处理时延：编码/解码、调制/解调、OFDM处理
+       - 传播时延：基于光速（300,000 km/s）
+       - 传输时延：基于带宽和数据量
+    
     Args:
         use_wireless: 是否使用无线链路
         ebno_db: 信噪比(dB)
@@ -45,7 +69,7 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
                                                subcarrier_spacing=subcarrier_spacing, fft_size=fft_size)
         else:
             print("使用基本无线链路（AWGN信道）")
-            wireless_link = WirelessLink(coderate=0.5)
+            wireless_link = WirelessLink(coderate=0.3)
     else:
         print("理想情况（无无线链路）")
         wireless_link = None
@@ -58,7 +82,7 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
         viewer_init(viewer)
         print("进入主循环...")
         step_count = 0
-        total_wireless_time = 0.0  # 总无线链路时延
+        total_wireless_delay = 0.0  # 总实际无线链路时延（仿真值）
         total_transmissions = 0  # 总传输次数
         ber_sum = 0.0  # 总误码率
 
@@ -68,13 +92,9 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
 
             # 控制机械臂
             if use_wireless and wireless_link:
-                # 记录无线链路处理开始时间
-                wireless_start_time = time.time()
                 # 通过无线链路传输关节角度
-                transmitted_waypoint, ber = wireless_link.transmit(waypoint, ebno_db=ebno_db)
-                # 计算无线链路处理时间
-                wireless_time = time.time() - wireless_start_time
-                total_wireless_time += wireless_time
+                transmitted_waypoint, ber, wireless_delay = wireless_link.transmit(waypoint, ebno_db=ebno_db)
+                total_wireless_delay += wireless_delay
                 data.ctrl[:6] = transmitted_waypoint
                 ber_sum += ber
                 total_transmissions += 1
@@ -85,7 +105,7 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
                     diff = np.abs(np.array(waypoint) - np.array(transmitted_waypoint))
                     print(f"步骤 {step_count}: 传输差异: {diff}")
                     print(f"步骤 {step_count}: 误码率: {ber:.6f}")
-                    print(f"步骤 {step_count}: 无线链路时延: {wireless_time*1000:.2f}ms")
+                    print(f"步骤 {step_count}: 无线链路时延: {wireless_delay*1000:.4f}ms")
             else:
                 # 直接控制机械臂
                 data.ctrl[:6] = waypoint
@@ -101,15 +121,11 @@ def main(use_wireless=True, ebno_db=10.0, use_force_sensor=False, use_advanced_w
             viewer.sync()
             time.sleep(0.002)  # 添加小延迟，确保机械臂运动流畅
 
-        # 计算总运行时间
-        total_run_time = time.time() - start_time
-
         # 计算并输出统计信息
         if total_transmissions > 0:
             average_ber = ber_sum / total_transmissions
             print(f"\n平均误码率: {average_ber:.6f}")
-            print(f"总无线链路时延: {total_wireless_time*1000:.2f}ms")
-        print(f"总运行时间: {total_run_time:.2f}s")
+            print(f"总无线链路时延: {total_wireless_delay*1000:.4f}ms")
         print("退出主循环...")
 
 

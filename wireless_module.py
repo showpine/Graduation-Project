@@ -33,8 +33,8 @@ class WirelessLink:
         self.encoder = sionna.phy.fec.ldpc.LDPC5GEncoder(self.k, self.n)
         self.decoder = sionna.phy.fec.ldpc.LDPC5GDecoder(self.encoder, hard_out=True)
     
-    def transmit(self, joint_angles, ebno_db=10.0):
-        """发送关节角度通过无线链路"""
+    def transmit(self, joint_angles, ebno_db=10.0, distance_km=10.0):
+        """发送关节角度通过无线链路，返回关节角度、误码率和无线链路时延"""
         # 将关节角度转换为比特流
         bits = self._joints_to_bits(joint_angles)
         
@@ -62,7 +62,29 @@ class WirelessLink:
         # 计算误码率
         ber = self._calculate_ber(bits, bits_hat)
         
-        return joint_angles_hat, ber
+        # 计算无线链路时延
+        # 1. 物理层处理时延
+        # 编码/解码时延 (假设处理速度为100 Mbps)
+        processing_speed = 100e6  # 比特/秒
+        coding_delay = (self.n * 2) / processing_speed  # 编码+解码
+        
+        # 调制/解调时延 (假设处理速度为100 Msymbols/s)
+        symbol_speed = 100e6  # 符号/秒
+        num_symbols = self.n / self.num_bits_per_symbol
+        modulation_delay = (num_symbols * 2) / symbol_speed  # 调制+解调
+        
+        # 2. 传播时延 (光速)
+        propagation_delay = distance_km / 300000  # 秒
+        
+        # 3. 传输时延 (发送时间)
+        # 传输时延 (假设传输速率为50 Mbps，符合实际无线链路速率)
+        transmission_rate = 50e6  # 比特/秒
+        transmission_delay = self.n / transmission_rate
+        
+        # 总无线链路时延
+        total_wireless_delay = coding_delay + modulation_delay + propagation_delay + transmission_delay
+        
+        return joint_angles_hat, ber, total_wireless_delay
     
     def _calculate_ber(self, bits, bits_hat):
         """计算误码率"""
@@ -251,8 +273,8 @@ class AdvancedWirelessLink:
             hard_out=True
         )
     
-    def transmit(self, joint_angles, ebno_db=10.0):
-        """发送关节角度通过高级无线链路"""
+    def transmit(self, joint_angles, ebno_db=10.0, distance_km=10.0):
+        """发送关节角度通过高级无线链路，返回关节角度、误码率和无线链路时延"""
         # 将关节角度转换为比特流
         bits = self._joints_to_bits(joint_angles)
         
@@ -297,7 +319,34 @@ class AdvancedWirelessLink:
         # 计算误码率
         ber = self._calculate_ber(bits, bits_hat)
         
-        return joint_angles_hat, ber
+        # 计算无线链路时延
+        # 1. 物理层处理时延
+        # 编码/解码时延 (假设处理速度为100 Mbps)
+        processing_speed = 100e6  # 比特/秒
+        coding_delay = (self.n * 2) / processing_speed  # 编码+解码
+        
+        # 调制/解调时延 (假设处理速度为100 Msymbols/s)
+        symbol_speed = 100e6  # 符号/秒
+        num_symbols = self.n / self.NUM_BITS_PER_SYMBOL
+        modulation_delay = (num_symbols * 2) / symbol_speed  # 调制+解调
+        
+        # OFDM处理时延 (基于FFT大小)
+        fft_size = self.RESOURCE_GRID_PARAMS['fft_size']
+        # 假设FFT处理速度为1GHz
+        fft_speed = 1e9  # 操作/秒
+        ofdm_delay = (fft_size * 2) / fft_speed  # FFT/IFFT操作
+        
+        # 2. 传播时延 (光速)
+        propagation_delay = distance_km / 300000  # 秒
+        
+        # 3. 传输时延 (发送时间) - 基于50 Mbps带宽，符合实际无线链路速率
+        transmission_rate = 50e6  # 比特/秒
+        transmission_delay = self.n / transmission_rate
+        
+        # 总无线链路时延
+        total_wireless_delay = coding_delay + modulation_delay + ofdm_delay + propagation_delay + transmission_delay
+        
+        return joint_angles_hat, ber, total_wireless_delay
     
     def _calculate_ber(self, bits, bits_hat):
         """计算误码率"""
